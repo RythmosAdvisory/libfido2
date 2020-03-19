@@ -17,29 +17,45 @@
 int
 main(void)
 {
-	fido_dev_info_t	*devlist;
-	size_t		 ndevs;
-	int		 r;
+	fido_dev_t		*dev;
+	fido_dev_info_t		*devlist;
+	size_t			 ndevs;
+	int			 r;
+	unsigned long long	 nok = 0;
+	unsigned long long	 nfail = 0;
 
 	fido_init(0);
 
-	if ((devlist = fido_dev_info_new(64)) == NULL)
-		errx(1, "fido_dev_info_new");
+	for (;;) {
+		printf("looping: %llu/%llu\n", nfail, nok);
 
-	if ((r = fido_dev_info_manifest(devlist, 64, &ndevs)) != FIDO_OK)
-		errx(1, "fido_dev_info_manifest: %s (0x%x)", fido_strerr(r), r);
+		if ((devlist = fido_dev_info_new(64)) == NULL)
+			errx(1, "fido_dev_info_new");
+		if ((dev = fido_dev_new()) == NULL)
+			errx(1, "fido_dev_new");
 
-	for (size_t i = 0; i < ndevs; i++) {
-		const fido_dev_info_t *di = fido_dev_info_ptr(devlist, i);
-		printf("%s: vendor=0x%04x, product=0x%04x (%s %s)\n",
-		    fido_dev_info_path(di),
-		    (uint16_t)fido_dev_info_vendor(di),
-		    (uint16_t)fido_dev_info_product(di),
-		    fido_dev_info_manufacturer_string(di),
-		    fido_dev_info_product_string(di));
+		if ((r = fido_dev_info_manifest(devlist, 64, &ndevs)) != FIDO_OK)
+			errx(1, "fido_dev_info_manifest: %s (0x%x)", fido_strerr(r), r);
+
+		if (ndevs) {
+			const fido_dev_info_t *di = fido_dev_info_ptr(devlist, 0);
+			const char *path = fido_dev_info_path(di);
+			const char *prod = fido_dev_info_product_string(di);
+			printf("opening %s\n", prod);
+			if ((r = fido_dev_open(dev, path)) != FIDO_OK) {
+				nfail++;
+				warn("fido_dev_open: %s", fido_strerr(r));
+			} else {
+				nok++;
+				printf("ok\n");
+				fido_dev_close(dev);
+			}
+
+		}
+
+		fido_dev_info_free(&devlist, ndevs);
+		fido_dev_free(&dev);
 	}
-
-	fido_dev_info_free(&devlist, ndevs);
 
 	exit(0);
 }
